@@ -1,137 +1,169 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import './App.css';
 
 function App() {
   const [text, setText] = useState('');
+  const [summary, setSummary] = useState('');
   const [notes, setNotes] = useState([]);
-
-  const fetchNotes = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/notes');
-      if (response.ok) {
-        const data = await response.json();
-        // التأكد من أن البيانات مصفوفة وليست فارغة أو غير معرّفة
-        setNotes(Array.isArray(data) ? data : []);
-      }
-    } catch (error) {
-      console.error("Error fetching notes:", error);
-    }
-  };
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchNotes();
   }, []);
 
-  const handleSummarize = async () => {
-    if (!text.trim()) return;
+  const fetchNotes = async () => {
     try {
-      const res = await fetch('http://localhost:8000/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      const res = await fetch('http://127.0.0.1:8000/notes');
       if (res.ok) {
-        setText('');
-        fetchNotes();
+        const data = await res.json();
+        setNotes(data);
       }
-    } catch (error) {
-      console.error("Error saving note:", error);
+    } catch (err) {
+      console.error("Error fetching notes:", err);
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleSummarize = async (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+
+    setLoading(true);
     try {
-      await fetch(`http://localhost:8000/notes/${id}`, {
-        method: 'DELETE'
+      const res = await fetch('http://127.0.0.1:8000/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
       });
-      fetchNotes();
-    } catch (error) {
-      console.error("Error deleting note:", error);
+
+      const data = await res.json();
+      if (res.ok) {
+        setSummary(data.summary);
+        setText(''); // تفريغ الصندوق فوراً
+        fetchNotes();
+      } else {
+        alert("حدث خطأ في السيرفر");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("تعذر الاتصال بالباك إند!");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // دالة حذف الملاحظة
+  const handleDelete = async (e, id) => {
+    e.stopPropagation(); // منع تفعيل النقر على الكرت عند الضغط على زر الحذف
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/notes/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        fetchNotes(); // تحديث القائمة بعد الحذف
+      } else {
+        alert("Failed to delete note");
+      }
+    } catch (err) {
+      console.error("Error deleting note:", err);
     }
   };
 
   return (
-    <div style={{ padding: '30px', maxWidth: '700px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '20px' }}>
-        AI Text Summarizer 🚀
-      </h1>
+    <div style={{ padding: '20px', maxWidth: '650px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+      <h1>AI Text Summarizer 🚀</h1>
+      <form onSubmit={handleSummarize}>
+        <textarea
+          rows="6"
+          style={{ width: '100%', padding: '10px', fontSize: '14px', borderRadius: '5px', border: '1px solid #ccc' }}
+          placeholder="Type or paste any text (English or Arabic) to summarize here..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '12px',
+            backgroundColor: '#007bff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '5px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            marginTop: '10px'
+          }}
+        >
+          {loading ? 'Summarizing...' : 'Summarize Text'}
+        </button>
+      </form>
 
-      <textarea
-        rows="5"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Type or paste any text (English or Arabic) to summarize here..."
-        dir="auto"
-        style={{
-          width: '100%',
-          padding: '12px',
-          borderRadius: '8px',
-          border: '1px solid #ccc',
-          fontSize: '16px',
-          marginBottom: '15px'
-        }}
-      />
+      {summary && (
+        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#e9ecef', borderRadius: '5px', textAlign: 'left' }}>
+          <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>Summary Result:</h3>
+          <p style={{ margin: '0', whiteSpace: 'pre-wrap', lineHeight: '1.6', wordBreak: 'break-word' }}>{summary}</p>
+        </div>
+      )}
 
-      <button
-        onClick={handleSummarize}
-        style={{
-          backgroundColor: '#007bff',
-          color: '#fff',
-          border: 'none',
-          padding: '10px 20px',
-          borderRadius: '6px',
-          fontSize: '16px',
-          cursor: 'pointer',
-          display: 'block',
-          width: '100%'
-        }}
-      >
-        Summarize Text
-      </button>
-
-      <hr style={{ margin: '30px 0', border: '0', borderTop: '1px solid #eee' }} />
-
-      <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Saved Notes 📋</h2>
-
-      <div>
-        {notes && notes.length > 0 ? (
-          notes.map((note, index) => (
-            <div
-              key={note.id || note[0] || index}
-              style={{
-                background: '#f9f9f9',
-                padding: '15px',
+      <h2 style={{ marginTop: '30px', borderBottom: '2px solid #eee', paddingBottom: '8px' }}>Saved Notes 📋</h2>
+      {notes.length === 0 ? (
+        <p style={{ color: '#6c757d' }}>No saved notes yet. Start by summarizing some text above!</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '15px' }}>
+          {notes.map((note) => (
+            <div 
+              key={note.id} 
+              onClick={() => setSummary(note.content)} 
+              style={{ 
+                position: 'relative',
+                padding: '15px', 
+                backgroundColor: '#f8f9fa', 
+                border: '1px solid #dee2e6', 
                 borderRadius: '8px',
-                marginBottom: '15px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                textAlign: 'left'
+                cursor: 'pointer',
+                textAlign: 'left',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                transition: 'all 0.2s ease'
               }}
             >
-              <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', color: '#333' }}>
-                {note.title || note[1] || 'Note'}
-              </h3>
-              <p style={{ margin: '0 0 15px 0', color: '#666', lineHeight: '1.5' }} dir="auto">
-                {note.summary || note[2] || note.text || ''}
-              </p>
+              {/* زر الحذف الأحمر */}
               <button
-                onClick={() => handleDelete(note.id || note[0])}
+                onClick={(e) => handleDelete(e, note.id)}
                 style={{
-                  padding: '6px 12px',
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
                   backgroundColor: '#dc3545',
-                  color: '#fff',
+                  color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  cursor: 'pointer'
                 }}
               >
-                🗑️ Delete
+                Delete
               </button>
+
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#007bff', marginBottom: '6px', paddingRight: '50px' }}>
+                📌 {note.title}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#495057', 
+                lineHeight: '1.5',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              }}>
+                {note.content}
+              </div>
+              <div style={{ fontSize: '11px', color: '#adb5bd', marginTop: '8px', textAlign: 'right' }}>
+                (Click to view full note above 👆)
+              </div>
             </div>
-          ))
-        ) : (
-          <p style={{ textAlign: 'center', color: '#888' }}>No saved notes yet. Start by summarizing some text above!</p>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,21 +1,16 @@
-import os
-from dotenv import load_dotenv
-from openai import OpenAI
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import mysql.connector
-from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
 
+# تحميل المتغيرات البيئية
 load_dotenv()
 
-api_key_value = os.getenv("OPENROUTER_API_KEY")
-
-ai_client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=api_key_value,
-)
-
 app = FastAPI()
+
+# إعداد الـ CORS لربط الفرانتد مع الباك إند بدون مشاكل
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,75 +19,68 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# شكل البيانات المطلوبة عند إنشاء أو تعديل ملاحظة
-class NoteSchema(BaseModel):
-    title: str
-    content: str
-
-# دالة الاتصال بقاعدة البيانات
+# دالة الاتصال بقاعدة البيانات MySQL عبر Workbench
 def get_db_connection():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="tilSTH&101", # استبدلها بكلمة مرورك الخاصة
-        database="notes_db"
+        host=os.getenv("DB_HOST", "localhost"),
+        user=os.getenv("DB_USER", "root"),
+        password="tilSTH&101",  # اكتب كلمة السر الخاصة فيك هنا بين الأقواس
+        database=os.getenv("DB_NAME", "notes_db")
     )
 
-# 1. عرض كل الملاحظات (GET)
+class NoteItem(BaseModel):
+    text: str
+
+# مسار جلب الملاحظات من جدولك الحالي
 @app.get("/notes")
 def get_notes():
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM notes")
-    notes = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return {"notes": notes}
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, title, content FROM notes ORDER BY id DESC")
+        notes = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return notes
+    except Exception as e:
+        return []
 
-# 2. إضافة ملاحظة جديدة (POST)
-@app.post("/notes")
-def create_note(note: NoteSchema):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO notes (title, content) VALUES (%s, %s)", (note.title, note.content))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return {"message": "Note created successfully!"}
+@app.post("/summarize")
+def summarize_text(item: NoteItem):
+    try:
+        # أخذ أول جملة أو جملتين للتلخيص بدون أي تكرار لكلمة Smart Summary
+        sentences = item.text.split(". ")
+        short_summary = sentences[0] + "." if len(sentences) > 0 else item.text
+        
+        # حفظ النتيجة مباشرة في قاعدة البيانات
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "INSERT INTO notes (title, content) VALUES (%s, %s)",
+            ("Smart Note", short_summary)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
 
-# 3. تعديل ملاحظة (PUT)
-@app.put("/notes/{note_id}")
-def update_note(note_id: int, note: NoteSchema):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE notes SET title=%s, content=%s WHERE id=%s", (note.title, note.content, note_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return {"message": "Note updated successfully!"}
-
-# 4. حذف ملاحظة (DELETE)
+        return {"status": "success", "summary": short_summary}
+        
+    except Exception as e:
+        print("Error:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+# إضافة مسار حذف الملاحظة (Delete Endpoint)
 @app.delete("/notes/{note_id}")
 def delete_note(note_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM notes WHERE id=%s", (note_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return {"message": "Note deleted successfully!"}
-@app.post("/ai/summarize")
-def summarize_note(text: str):
-    response = ai_client.chat.completions.create(
-        model="meta-llama/llama-3.1-8b-instruct",
-        messages=[
-            {
-                "role": "system", 
-                "content": "أنت مساعد ذكي متخصص في تلخيص النصوص. قم بتلخيص النص المطلوب باللغة العربية فقط في 2 إلى 3 جمل قصيرة ومباشرة بدون إضافة أي كلمات أجنبية أو رموز غريبة."
-            },
-            {"role": "user", "content": f"لخص النص التالي بشكل مختصر جداً:\n{text}"}
-        ]
-    )
-    
-    summary = response.choices[0].message.content
-    return {"summary": summary}    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM notes WHERE id = %s", (note_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success"}
+   
+    except Exception as e:
+        print("Error:", e)
+        raise HTTPException(status_code=500, detail=str(e))
