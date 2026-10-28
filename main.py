@@ -5,12 +5,10 @@ import mysql.connector
 import os
 from dotenv import load_dotenv
 
-# تحميل المتغيرات البيئية
 load_dotenv()
 
 app = FastAPI()
 
-# إعداد الـ CORS لربط الفرانتد مع الباك إند بدون مشاكل
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,19 +17,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# دالة الاتصال بقاعدة البيانات MySQL عبر Workbench
 def get_db_connection():
     return mysql.connector.connect(
         host=os.getenv("DB_HOST", "localhost"),
         user=os.getenv("DB_USER", "root"),
-        password="tilSTH&101",  # اكتب كلمة السر الخاصة فيك هنا بين الأقواس
+        password="tilSTH&101",
         database=os.getenv("DB_NAME", "notes_db")
     )
 
 class NoteItem(BaseModel):
     text: str
 
-# مسار جلب الملاحظات من جدولك الحالي
 @app.get("/notes")
 def get_notes():
     try:
@@ -48,11 +44,9 @@ def get_notes():
 @app.post("/summarize")
 def summarize_text(item: NoteItem):
     try:
-        # أخذ أول جملة أو جملتين للتلخيص بدون أي تكرار لكلمة Smart Summary
         sentences = item.text.split(". ")
         short_summary = sentences[0] + "." if len(sentences) > 0 else item.text
         
-        # حفظ النتيجة مباشرة في قاعدة البيانات
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -69,7 +63,7 @@ def summarize_text(item: NoteItem):
     except Exception as e:
         print("Error:", e)
         raise HTTPException(status_code=500, detail=str(e))
-# إضافة مسار حذف الملاحظة (Delete Endpoint)
+
 @app.delete("/notes/{note_id}")
 def delete_note(note_id: int):
     try:

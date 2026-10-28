@@ -38,28 +38,27 @@ function App() {
       const data = await res.json();
       if (res.ok) {
         setSummary(data.summary);
-        setText(''); // تفريغ الصندوق فوراً
+        setText('');
         fetchNotes();
       } else {
-        alert("حدث خطأ في السيرفر");
+        alert("Server error occurred");
       }
     } catch (err) {
       console.error(err);
-      alert("تعذر الاتصال بالباك إند!");
+      alert("Failed to connect to backend!");
     } finally {
       setLoading(false);
     }
   };
 
-  // دالة حذف الملاحظة
   const handleDelete = async (e, id) => {
-    e.stopPropagation(); // منع تفعيل النقر على الكرت عند الضغط على زر الحذف
+    e.stopPropagation();
     try {
       const res = await fetch(`http://127.0.0.1:8000/notes/${id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
-        fetchNotes(); // تحديث القائمة بعد الحذف
+        fetchNotes();
       } else {
         alert("Failed to delete note");
       }
@@ -126,7 +125,6 @@ function App() {
                 transition: 'all 0.2s ease'
               }}
             >
-              {/* زر الحذف الأحمر */}
               <button
                 onClick={(e) => handleDelete(e, note.id)}
                 style={{
